@@ -30,7 +30,7 @@ async def meow_job():
             print(f"خطا در ارسال پیام: {e}")
         
         # توقف به مدت ۵ دقیقه (۳۰۰ ثانیه)
-        await asyncio.sleep(300)
+        await asyncio.sleep(290)
 
 async def handle(request):
     """یک صفحه وب ساده برای اینکه سرور رندر خاموش نشود"""
