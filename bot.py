@@ -30,8 +30,16 @@ async def meow_job():
             print(f"خطا در ارسال پیام: {e}")
         
         # توقف به مدت ۵ دقیقه (۳۰۰ ثانیه)
-        await asyncio.sleep(290)
-
+        await asyncio.sleep(275)
+    while True:
+        try:
+            await client.send_message(CHAT_TARGET, 'ماهی')
+            print("پیام 'میو' با موفقیت ارسال شد.")
+        except Exception as e:
+            print(f"خطا در ارسال پیام: {e}")
+        
+        # توقف به مدت ۵ دقیقه (۳۰۰ ثانیه)
+        await asyncio.sleep(3600)
 async def handle(request):
     """یک صفحه وب ساده برای اینکه سرور رندر خاموش نشود"""
     return web.Response(text="Meow Bot is Running Perfectly!")
