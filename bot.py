@@ -29,7 +29,6 @@ notification_target = 'me'  # پیش‌فرض: پیام‌های ذخیره‌ش
 # ==========================================
 @client.on(events.NewMessage(chats=CHAT_TARGET))
 async def click_button_handler(event):
-    """این تابع بلافاصله پیام‌ها رو بررسی میکنه و دکمه رو میزنه"""
     if event.message.buttons:
         await asyncio.sleep(1) 
         msg_text = event.message.text or ""
@@ -63,9 +62,8 @@ async def click_button_handler(event):
                         print(f"❌ خطا در کلیک برداشت: {e}")
 
 # ==========================================
-# بخش دوم: مدیریت چنل‌ها (potion, set, delete, افزودن)
+# بخش دوم: مدیریت چنل‌ها (potion, set, delete, check, افزودن)
 # ==========================================
-# این بخش فقط به پیام‌هایی که در "پیام‌های ذخیره شده" (me) می‌فرستید واکنش نشان می‌دهد
 @client.on(events.NewMessage(chats='me'))
 async def manage_channels_handler(event):
     global notification_target
@@ -84,20 +82,36 @@ async def manage_channels_handler(event):
             await event.reply(f"✅ مقصد پیام‌ها تغییر کرد. از این به بعد آلارم‌های چنل به جای سیو مسیج، به پیوی **{target}** ارسال میشن.")
         return
 
-    # ۲. هندلر برای potion
+    # ۲. هندلر برای بررسی وضعیت و چنل‌های ثبت شده
+    if text_lower == '/check':
+        # بررسی مقصد ارسال‌ها
+        target_display = notification_target if notification_target != 'me' else "(ارسال به همینجا - سیو مسیج)"
+        
+        # بررسی چنل‌ها
+        if not monitored_channels:
+            msg = f"📭 لیست چنل‌ها خالیه و هیچ چنلی ست نشده!\n\n🎯 مقصد پیام‌ها: {target_display}"
+        else:
+            msg = "📋 لیست چنل‌هایی که در حال چک شدن هستن:\n\n"
+            for ch in monitored_channels:
+                msg += f"▪️ {ch}\n"
+            msg += f"\n🎯 مقصد پیام‌ها: {target_display}"
+            
+        await event.reply(msg)
+        return
+
+    # ۳. هندلر برای potion
     if text_lower == 'potion':
         await event.reply("پدب رو چک کن")
         return
 
-    # ۳. هندلر برای پاک کردن چنل (مثلا delete @username)
+    # ۴. هندلر برای پاک کردن چنل (مثلا delete @username)
     if text_lower.startswith('delete '):
-        target = text[7:].strip().replace('@', '') # کلمه بعد از delete رو میگیره و @ رو حذف میکنه
+        target = text[7:].strip().replace('@', '') 
         
         if target in monitored_channels:
             monitored_channels.remove(target)
             await event.reply(f"❌ چنل {target} از لیست حذف شد و دیگه چک نمیشه.")
         else:
-            # بررسی حالت آیدی عددی
             target_id = f"-100{target}" if not target.startswith('-100') else target
             if target_id in monitored_channels:
                 monitored_channels.remove(target_id)
@@ -106,17 +120,15 @@ async def manage_channels_handler(event):
                 await event.reply("⚠️ این چنل اصلاً تو لیست نبود.")
         return
 
-    # ۴. هندلر برای ست کردن چنل جدید
+    # ۵. هندلر برای ست کردن چنل جدید
     channel_id_or_user = None
 
-    # بررسی اینکه آیا فوروارد شده است؟
     if event.fwd_from and event.fwd_from.from_id:
         if isinstance(event.fwd_from.from_id, PeerChannel):
             channel_id_or_user = f"-100{event.fwd_from.from_id.channel_id}"
             
-    # بررسی اینکه آیا متنی حاوی آیدی ارسال شده؟
     elif text.startswith('@') or text.startswith('-100'):
-        channel_id_or_user = text.replace('@', '') # ذخیره بدون @
+        channel_id_or_user = text.replace('@', '') 
 
     if channel_id_or_user:
         monitored_channels.add(channel_id_or_user)
@@ -127,7 +139,6 @@ async def manage_channels_handler(event):
 # ==========================================
 @client.on(events.NewMessage())
 async def watch_channels_handler(event):
-    # اگر پیام در چنل نبود بی‌خیال شو
     if not event.is_channel or event.is_group:
         return
 
@@ -136,16 +147,31 @@ async def watch_channels_handler(event):
         chat = await event.get_chat()
         username = chat.username if chat.username else None
 
-        # بررسی اینکه آیا این چنل در لیست ما هست یا نه
         if chat_id_str in monitored_channels or (username and username in monitored_channels):
-            alert_text = f"این چنل ({chat.title or username}) یه پیام جدید داره\nو با هر پیامش اینو بگه"
+            
+            # ساخت لینک برای کلیک کردن و رفتن به همون پیام تو چنل
+            if username:
+                # اگه چنل پابلیک باشه
+                msg_link = f"https://t.me/{username}/{event.id}"
+                channel_display = f"@{username}"
+            else:
+                # اگه چنل پرایوت باشه
+                clean_id = chat_id_str.replace("-100", "")
+                msg_link = f"https://t.me/c/{clean_id}/{event.id}"
+                channel_display = "کانال خصوصی"
+
+            # متن نهایی پیام
+            alert_text = (
+                f"این چنل یه پیام جدید گذاشته:\n"
+                f"نام: {chat.title}\n"
+                f"آیدی: {channel_display}\n\n"
+                f"🔗 ورود به چنل و دیدن پیام:\n{msg_link}\n\n"
+                f"و با هر پیامش اینو بگه"
+            )
             
             try:
-                # ارسال آلارم به شخصی که توسط دستور /set مشخص شده
                 await client.send_message(notification_target, alert_text)
             except Exception as target_error:
-                # اگر یوزرنیمی که ست کردید اشتباه بود یا اکانت فیک نتونست بهش پیام بده
-                # ارورش رو توی سیو مسیج بهتون میگه
                 await client.send_message('me', f"❌ نتونستم آلارم رو به {notification_target} بفرستم!\nخطا: {target_error}")
                 
     except Exception as e:
@@ -184,7 +210,7 @@ async def pishi_job():
 # بخش پنجم: وب سرور رندر و اجرای اصلی
 # ==========================================
 async def handle(request):
-    return web.Response(text="Bot is running completely (Game + Channel Monitor)")
+    return web.Response(text="Bot is running completely (Game + Channel Monitor + Check CMD)")
 
 async def main():
     app = web.Application()
