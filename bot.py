@@ -3,6 +3,7 @@ import asyncio
 from aiohttp import web
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
+from telethon.tl.types import PeerChannel
 
 # دریافت اطلاعات از سرور رندر
 API_ID = int(os.environ.get('API_ID', 2040))
@@ -18,18 +19,20 @@ if CHAT_TARGET.lstrip('-').isdigit():
 client = TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH)
 
 # ==========================================
-# بخش اول: گوش دادن به پیام‌ها و کلیک سریع
+# متغیر برای ذخیره چنل‌هایی که باید چک شوند
+# ==========================================
+monitored_channels = set()
+
+# ==========================================
+# بخش اول: گوش دادن به پیام‌ها و کلیک سریع (ربات بازی)
 # ==========================================
 @client.on(events.NewMessage(chats=CHAT_TARGET))
 async def click_button_handler(event):
     """این تابع بلافاصله پیام‌ها رو بررسی میکنه و دکمه رو میزنه"""
     if event.message.buttons:
-        # تأخیر رو به 1 ثانیه کاهش دادیم که ماهی فرار نکنه!
         await asyncio.sleep(1) 
-        
         msg_text = event.message.text or ""
         
-        # ۱. شکار گربه خیابونی
         if 'گربه خیابونی' in msg_text:
             try:
                 await event.message.click(0)
@@ -38,21 +41,18 @@ async def click_button_handler(event):
             except Exception as e:
                 print(f"❌ خطا در شکار گربه خیابونی: {e}")
 
-        # ۲. بررسی دکمه‌ها برای ماهی و پیشی
         for row in event.message.buttons:
             for button in row:
                 btn_text = button.text or ""
                 
-                # بررسی هوشمندتر برای کلیک روی دکمه ماهی
                 if 'پیشی بخوره' in btn_text or 'بده' in btn_text:
                     try:
                         await button.click()
-                        print("🐟 ✅ روی دکمه 'بده پیشی بخوره' کلیک شد تا ماهی فرار نکنه!")
+                        print("🐟 ✅ روی دکمه 'بده پیشی بخوره' کلیک شد!")
                         return 
                     except Exception as e:
                         print(f"❌ خطا در کلیک ماهی: {e}")
                 
-                # بررسی هوشمندتر برای برداشت پوینت‌ها
                 elif 'برداشت' in btn_text or 'پوینت' in btn_text:
                     try:
                         await button.click()
@@ -62,47 +62,112 @@ async def click_button_handler(event):
                         print(f"❌ خطا در کلیک برداشت: {e}")
 
 # ==========================================
-# بخش دوم: ارسال پیام‌های زمان‌بندی شده (میو، ماهی، پیشی)
+# بخش دوم: مدیریت چنل‌ها (potion, اضافه کردن, delete)
 # ==========================================
+# این بخش فقط به پیام‌هایی که در "پیام‌های ذخیره شده" (me) می‌فرستید واکنش نشان می‌دهد
+@client.on(events.NewMessage(chats='me'))
+async def manage_channels_handler(event):
+    text = event.raw_text.strip()
+    text_lower = text.lower()
 
+    # ۱. هندلر برای potion
+    if text_lower == 'potion':
+        await event.reply("پدب رو چک کن")
+        return
+
+    # ۲. هندلر برای پاک کردن چنل (مثلا delete @username)
+    if text_lower.startswith('delete '):
+        target = text[7:].strip().replace('@', '') # کلمه بعد از delete رو میگیره و @ رو حذف میکنه
+        
+        if target in monitored_channels:
+            monitored_channels.remove(target)
+            await event.reply(f"❌ چنل {target} از لیست حذف شد و دیگه چک نمیشه.")
+        else:
+            # بررسی حالت آیدی عددی
+            target_id = f"-100{target}" if not target.startswith('-100') else target
+            if target_id in monitored_channels:
+                monitored_channels.remove(target_id)
+                await event.reply(f"❌ چنل {target_id} از لیست حذف شد و دیگه چک نمیشه.")
+            else:
+                await event.reply("⚠️ این چنل اصلاً تو لیست نبود.")
+        return
+
+    # ۳. هندلر برای ست کردن چنل جدید
+    channel_id_or_user = None
+
+    # بررسی اینکه آیا فوروارد شده است؟
+    if event.fwd_from and event.fwd_from.from_id:
+        if isinstance(event.fwd_from.from_id, PeerChannel):
+            channel_id_or_user = f"-100{event.fwd_from.from_id.channel_id}"
+            
+    # بررسی اینکه آیا متنی حاوی آیدی ارسال شده؟
+    elif text.startswith('@') or text.startswith('-100'):
+        channel_id_or_user = text.replace('@', '') # ذخیره بدون @
+
+    if channel_id_or_user:
+        monitored_channels.add(channel_id_or_user)
+        await event.reply(f"✅ چنل با موفقیت ست شد و چک می‌شود!\n(آیدی ثبت شده: {channel_id_or_user})")
+
+
+# ==========================================
+# بخش سوم: چک کردن چنل‌ها برای پیام جدید
+# ==========================================
+@client.on(events.NewMessage())
+async def watch_channels_handler(event):
+    # اگر پیام در چنل نبود بی‌خیال شو
+    if not event.is_channel or event.is_group:
+        return
+
+    try:
+        chat_id_str = str(event.chat_id)
+        chat = await event.get_chat()
+        username = chat.username if chat.username else None
+
+        # بررسی اینکه آیا این چنل در لیست ما هست یا نه
+        if chat_id_str in monitored_channels or (username and username in monitored_channels):
+            # ارسال پیام به پیوی خودتون (Saved Messages)
+            alert_text = f"این چنل ({chat.title or username}) یه پیام جدید داره\nو با هر پیامش اینو بگه"
+            await client.send_message('me', alert_text)
+            
+            # اگه خواستی خود پیامِ چنل هم برات فوروارد بشه خط پایین رو از کامنت دربیار:
+            # await event.forward_to('me')
+    except Exception as e:
+        print(f"Error checking channel msg: {e}")
+
+# ==========================================
+# بخش چهارم: ارسال پیام‌های زمان‌بندی شده
+# ==========================================
 async def meow_job():
-    """هر ۵ دقیقه (حدود ۲۹۰ ثانیه) میگه 'میو'"""
     while True:
         try:
             await client.send_message(CHAT_TARGET, 'میو')
-            print("😺 پیام 'میو' ارسال شد.")
-        except Exception as e:
-            print(f"خطا در ارسال میو: {e}")
+        except Exception:
+            pass
         await asyncio.sleep(290) 
 
 async def fish_job():
-    """هر ۱ ساعت (۳۶۰۰ ثانیه) میگه 'ماهی'"""
-    await asyncio.sleep(5) # ۵ ثانیه تاخیر اولیه که با میو تداخل نکنه
+    await asyncio.sleep(5) 
     while True:
         try:
             await client.send_message(CHAT_TARGET, 'ماهی')
-            print("🎣 پیام 'ماهی' ارسال شد.")
-        except Exception as e:
-            print(f"خطا در ارسال ماهی: {e}")
+        except Exception:
+            pass
         await asyncio.sleep(3600) 
 
 async def pishi_job():
-    """هر ۵ ساعت (۱۸۰۰۰ ثانیه) میگه 'پیشی'"""
-    await asyncio.sleep(15) # ۱۵ ثانیه تاخیر اولیه که با بقیه تداخل نکنه
+    await asyncio.sleep(15) 
     while True:
         try:
             await client.send_message(CHAT_TARGET, 'پیشی')
-            print("🐱 پیام 'پیشی' ارسال شد.")
-        except Exception as e:
-            print(f"خطا در ارسال پیشی: {e}")
+        except Exception:
+            pass
         await asyncio.sleep(18000) 
 
 # ==========================================
-# بخش سوم: وب سرور رندر و اجرای اصلی
+# بخش پنجم: وب سرور رندر و اجرای اصلی
 # ==========================================
 async def handle(request):
-    """جلوگیری از خاموش شدن سرور رندر"""
-    return web.Response(text="Meow Bot is Running 3 Jobs (Meow, Fish, Pishi) and Clicking Fast!")
+    return web.Response(text="Bot is running completely (Game + Channel Monitor)")
 
 async def main():
     app = web.Application()
@@ -116,9 +181,8 @@ async def main():
     print(f"✅ وب‌سرور روی پورت {port} اجرا شد.")
     
     await client.start()
-    print("✅ یوزربات متصل شد! آماده برای ارسال میو، ماهی، پیشی و کلیک روی دکمه‌ها...")
+    print("✅ یوزربات متصل شد! آماده کار...")
 
-    # اجرای هر ۳ تسک همزمان در پس‌زمینه
     asyncio.create_task(meow_job())
     asyncio.create_task(fish_job())
     asyncio.create_task(pishi_job())
