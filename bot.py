@@ -1,10 +1,8 @@
 import os
 import asyncio
-import json
 from aiohttp import web
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
-from telethon.tl.types import PeerChannel
 
 # دریافت اطلاعات از سرور رندر
 API_ID = int(os.environ.get('API_ID', 2040))
@@ -12,46 +10,24 @@ API_HASH = os.environ.get('API_HASH', 'b18441a1ff607e10a989891a5462e627')
 SESSION_STRING = os.environ.get('SESSION_STRING', '')
 CHAT_TARGET = os.environ.get('CHAT_TARGET', '')
 
+# تبدیل آیدی‌های عددی به int
 if CHAT_TARGET.lstrip('-').isdigit():
     CHAT_TARGET = int(CHAT_TARGET)
 
 client = TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH)
 
 # ==========================================
-# سیستم ذخیره‌سازی دائمی چنل‌ها در فایل
+# تنظیمات هاردکد شده (غیرقابل پاک شدن با ری‌استارت)
 # ==========================================
-CHANNELS_FILE = 'channels.json'
-TARGET_FILE = 'target.txt'
+# اضافه کردن -100 به ابتدای آیدی چنل‌ها (استاندارد API تلگرام)
+TARGET_CHANNELS = [-1003382427670, -1002790319024]
+NOTIFICATION_USER = '@luv_potion'
 
-def load_channels():
-    if os.path.exists(CHANNELS_FILE):
-        try:
-            with open(CHANNELS_FILE, 'r') as f:
-                return set(json.load(f))
-        except:
-            return set()
-    return set()
-
-def save_channels(channels):
-    with open(CHANNELS_FILE, 'w') as f:
-        json.dump(list(channels), f)
-
-def load_target():
-    if os.path.exists(TARGET_FILE):
-        with open(TARGET_FILE, 'r') as f:
-            return f.read().strip()
-    return 'me'
-
-def save_target(target):
-    with open(TARGET_FILE, 'w') as f:
-        f.write(target)
-
-# بارگذاری اطلاعات هنگام روشن شدن ربات
-monitored_channels = load_channels()
-notification_target = load_target()
+# متغیر برای روشن/خاموش کردن مانیتور چنل (پیش‌فرض: روشن)
+monitoring_is_active = True
 
 # ==========================================
-# بخش اول: گوش دادن به پیام‌ها و کلیک سریع
+# بخش اول: گوش دادن به پیام‌ها و کلیک سریع (ربات بازی)
 # ==========================================
 @client.on(events.NewMessage(chats=CHAT_TARGET))
 async def click_button_handler(event):
@@ -88,115 +64,58 @@ async def click_button_handler(event):
                         pass
 
 # ==========================================
-# بخش دوم: مدیریت چنل‌ها
+# بخش دوم: دستورات روشن و خاموش کردن (/on و /off)
 # ==========================================
-@client.on(events.NewMessage(chats='me'))
-async def manage_channels_handler(event):
-    global notification_target
+# این دستورات رو می‌تونید هم تو سیو مسیج (me) بفرستید هم از طرف @luv_potion
+@client.on(events.NewMessage(chats=['me', NOTIFICATION_USER]))
+async def toggle_monitoring(event):
+    global monitoring_is_active
+    text = event.raw_text.strip().lower()
+
+    if text == '/on':
+        monitoring_is_active = True
+        await event.reply("✅ مانیتور کردن دو چنل روشن شد.")
     
-    text = event.raw_text.strip()
-    text_lower = text.lower()
-
-    if text_lower.startswith('/set '):
-        target = text[5:].strip()
-        notification_target = target
-        save_target(target) # ذخیره در فایل
-        
-        if target.lower() == 'me':
-            await event.reply("✅ مقصد پیام‌ها تغییر کرد. ارسال به: **(سیو مسیج)**")
-        else:
-            await event.reply(f"✅ مقصد پیام‌ها تغییر کرد. ارسال به پیوی: **{target}**")
-        return
-
-    if text_lower == '/check':
-        target_display = notification_target if notification_target != 'me' else "(سیو مسیج)"
-        
-        if not monitored_channels:
-            msg = f"📭 لیست چنل‌ها خالیه!\n\n🎯 مقصد پیام‌ها: {target_display}"
-        else:
-            msg = "📋 لیست چنل‌هایی که در حال چک شدن هستن:\n\n"
-            for ch in monitored_channels:
-                msg += f"▪️ {ch}\n"
-            msg += f"\n🎯 مقصد پیام‌ها: {target_display}"
-            
-        await event.reply(msg)
-        return
-
-    if text_lower == 'delete all':
-        monitored_channels.clear()
-        save_channels(monitored_channels) # ذخیره تغییرات
-        await event.reply("🗑 ✅ تمام چنل‌ها با موفقیت پاک شدند!")
-        return
-
-    if text_lower.startswith('delete '):
-        target = text[7:].strip().replace('@', '') 
-        
-        if target in monitored_channels:
-            monitored_channels.remove(target)
-            save_channels(monitored_channels)
-            await event.reply(f"❌ چنل {target} از لیست حذف شد.")
-        else:
-            target_id = f"-100{target}" if not target.startswith('-100') else target
-            if target_id in monitored_channels:
-                monitored_channels.remove(target_id)
-                save_channels(monitored_channels)
-                await event.reply(f"❌ چنل {target_id} از لیست حذف شد.")
-            else:
-                await event.reply("⚠️ این چنل تو لیست نبود.")
-        return
-
-    channel_id_or_user = None
-
-    if event.fwd_from and event.fwd_from.from_id:
-        if isinstance(event.fwd_from.from_id, PeerChannel):
-            channel_id_or_user = f"-100{event.fwd_from.from_id.channel_id}"
-            
-    elif text.startswith('@') or text.startswith('-100'):
-        channel_id_or_user = text.replace('@', '') 
-
-    if channel_id_or_user:
-        monitored_channels.add(channel_id_or_user)
-        save_channels(monitored_channels) # ذخیره تغییرات در فایل
-        await event.reply(f"✅ چنل با موفقیت ست شد!\n(آیدی ثبت شده: {channel_id_or_user})")
+    elif text == '/off':
+        monitoring_is_active = False
+        await event.reply("❌ مانیتور کردن دو چنل خاموش شد. (ربات بازی همچنان روشنه)")
 
 # ==========================================
-# بخش سوم: چک کردن چنل‌ها برای پیام جدید
+# بخش سوم: چک کردن دقیقاً همون دو چنل مشخص شده
 # ==========================================
-@client.on(events.NewMessage())
-async def watch_channels_handler(event):
-    if not event.is_channel or event.is_group:
+@client.on(events.NewMessage(chats=TARGET_CHANNELS))
+async def watch_specific_channels_handler(event):
+    # اگه مانیتور چنل‌ها خاموش بود، بی‌خیال شو
+    if not monitoring_is_active:
         return
 
     try:
-        chat_id_str = str(event.chat_id)
         chat = await event.get_chat()
         username = chat.username if chat.username else None
+        chat_id_str = str(chat.id)
 
-        if chat_id_str in monitored_channels or (username and username in monitored_channels):
-            
-            if username:
-                msg_link = f"https://t.me/{username}/{event.id}"
-                channel_display = f"@{username}"
-            else:
-                clean_id = chat_id_str.replace("-100", "")
-                msg_link = f"https://t.me/c/{clean_id}/{event.id}"
-                channel_display = "کانال خصوصی"
+        # ساخت لینک پیام
+        if username:
+            msg_link = f"https://t.me/{username}/{event.id}"
+            channel_display = f"@{username}"
+        else:
+            clean_id = chat_id_str.replace("-100", "")
+            msg_link = f"https://t.me/c/{clean_id}/{event.id}"
+            channel_display = "کانال خصوصی"
 
-            alert_text = (
-                f"این چنل یه پیام جدید گذاشته:\n"
-                f"نام: {chat.title}\n"
-                f"آیدی: {channel_display}\n\n"
-                f"🔗 ورود به چنل و دیدن پیام:\n{msg_link}\n\n"
-                f"و با هر پیامش اینو بگه"
-            )
+        alert_text = (
+            f"این چنل یه پیام جدید گذاشته:\n"
+            f"نام: {chat.title}\n"
+            f"آیدی: {channel_display}\n\n"
+            f"🔗 ورود به چنل و دیدن پیام:\n{msg_link}\n\n"
+            f"و با هر پیامش اینو بگه"
+        )
+        
+        # ارسال پیام به آیدی لشن شده
+        await client.send_message(NOTIFICATION_USER, alert_text)
             
-            try:
-                await client.send_message(notification_target, alert_text)
-            except Exception as e:
-                print(f"Error sending to target: {e}")
-                
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"Error checking specific channels: {e}")
 
 # ==========================================
 # بخش چهارم: ارسال پیام‌های زمان‌بندی شده
@@ -231,7 +150,7 @@ async def pishi_job():
 # بخش پنجم: وب سرور رندر و اجرای اصلی
 # ==========================================
 async def handle(request):
-    return web.Response(text="Bot is running! (Memory Loss Protected)")
+    return web.Response(text="Bot is running! (Hardcoded Channels + Game)")
 
 async def main():
     app = web.Application()
