@@ -18,88 +18,91 @@ if CHAT_TARGET.lstrip('-').isdigit():
 client = TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH)
 
 # ==========================================
-# بخش اول: گوش دادن به پیام‌ها و کلیک هوشمند روی دکمه‌ها
+# بخش اول: گوش دادن به پیام‌ها و کلیک سریع
 # ==========================================
 @client.on(events.NewMessage(chats=CHAT_TARGET))
 async def click_button_handler(event):
-    """این تابع پیام‌های جدید رو چک می‌کنه و دکمه‌های خاص رو فشار می‌ده"""
-    # بررسی می‌کنه که آیا پیام دکمه داره یا نه
+    """این تابع بلافاصله پیام‌ها رو بررسی میکنه و دکمه رو میزنه"""
     if event.message.buttons:
-        # 2 ثانیه صبر می‌کنه که شبیه انسان باشه و تلگرام شک نکنه
-        await asyncio.sleep(2) 
+        # تأخیر رو به 1 ثانیه کاهش دادیم که ماهی فرار نکنه!
+        await asyncio.sleep(1) 
         
-        # ------------------------------------------------
-        # ۱. شکار گربه خیابونی (بررسی متن خودِ پیام)
-        # ------------------------------------------------
         msg_text = event.message.text or ""
+        
+        # ۱. شکار گربه خیابونی
         if 'گربه خیابونی' in msg_text:
             try:
-                # چون متن دقیق دکمه رو نمی‌دونیم، بهش میگیم روی اولین دکمه کلیک کنه
                 await event.message.click(0)
-                print("🐈 ✅ پیام 'گربه خیابونی' ظاهر شد! روی دکمه‌اش کلیک کردیم.")
-                return # بعد از کلیک، از تابع خارج می‌شه
+                print("🐈 ✅ پیام 'گربه خیابونی' شکار شد!")
+                return
             except Exception as e:
                 print(f"❌ خطا در شکار گربه خیابونی: {e}")
 
-        # ------------------------------------------------
-        # ۲. بررسی دکمه‌های کارهای روتین (ماهی و پیشی)
-        # ------------------------------------------------
+        # ۲. بررسی دکمه‌ها برای ماهی و پیشی
         for row in event.message.buttons:
             for button in row:
+                btn_text = button.text or ""
                 
-                # اگر متن دکمه شامل "بده پیشی بخوره" بود:
-                if 'بده پیشی بخوره' in button.text:
+                # بررسی هوشمندتر برای کلیک روی دکمه ماهی
+                if 'پیشی بخوره' in btn_text or 'بده' in btn_text:
                     try:
                         await button.click()
-                        print("🐟 ✅ روی دکمه 'بده پیشی بخوره' با موفقیت کلیک شد!")
+                        print("🐟 ✅ روی دکمه 'بده پیشی بخوره' کلیک شد تا ماهی فرار نکنه!")
                         return 
                     except Exception as e:
                         print(f"❌ خطا در کلیک ماهی: {e}")
                 
-                # اگر متن دکمه شامل "برداشت میو پوینت ها" بود:
-                elif 'برداشت میو پوینت ها' in button.text:
+                # بررسی هوشمندتر برای برداشت پوینت‌ها
+                elif 'برداشت' in btn_text or 'پوینت' in btn_text:
                     try:
                         await button.click()
-                        print("💰 ✅ روی دکمه 'برداشت میو پوینت ها' با موفقیت کلیک شد!")
+                        print("💰 ✅ روی دکمه 'برداشت میو پوینت ها' کلیک شد!")
                         return 
                     except Exception as e:
                         print(f"❌ خطا در کلیک برداشت: {e}")
 
 # ==========================================
-# بخش دوم: ارسال پیام‌های زمان‌بندی شده
+# بخش دوم: ارسال پیام‌های زمان‌بندی شده (میو، ماهی، پیشی)
 # ==========================================
-async def pishi_job():
-    """ارسال پیام پیشی برای باز شدن منوی برداشت"""
+
+async def meow_job():
+    """هر ۵ دقیقه (حدود ۲۹۰ ثانیه) میگه 'میو'"""
     while True:
         try:
-            await client.send_message(CHAT_TARGET, 'پیشی')
-            print("🐱 پیام 'پیشی' با موفقیت ارسال شد.")
+            await client.send_message(CHAT_TARGET, 'میو')
+            print("😺 پیام 'میو' ارسال شد.")
         except Exception as e:
-            print(f"خطا در ارسال پیام پیشی: {e}")
-        
-        # توقف به مدت ۲۷۵ ثانیه (حدود ۴.۵ دقیقه)
-        await asyncio.sleep(275) 
+            print(f"خطا در ارسال میو: {e}")
+        await asyncio.sleep(290) 
 
 async def fish_job():
-    """ارسال پیام ماهی برای دریافت ماهی (هر ۱ ساعت)"""
-    # 10 ثانیه صبر می‌کنه تا با پیام پیشی تداخل نداشته باشه
-    await asyncio.sleep(10) 
+    """هر ۱ ساعت (۳۶۰۰ ثانیه) میگه 'ماهی'"""
+    await asyncio.sleep(5) # ۵ ثانیه تاخیر اولیه که با میو تداخل نکنه
     while True:
         try:
             await client.send_message(CHAT_TARGET, 'ماهی')
-            print("🎣 پیام 'ماهی' با موفقیت ارسال شد.")
+            print("🎣 پیام 'ماهی' ارسال شد.")
         except Exception as e:
-            print(f"خطا در ارسال پیام ماهی: {e}")
-        
-        # توقف به مدت ۱ ساعت (۳۶۰۰ ثانیه)
+            print(f"خطا در ارسال ماهی: {e}")
         await asyncio.sleep(3600) 
+
+async def pishi_job():
+    """هر ۵ ساعت (۱۸۰۰۰ ثانیه) میگه 'پیشی'"""
+    await asyncio.sleep(15) # ۱۵ ثانیه تاخیر اولیه که با بقیه تداخل نکنه
+    while True:
+        try:
+            await client.send_message(CHAT_TARGET, 'پیشی')
+            print("🐱 پیام 'پیشی' ارسال شد.")
+        except Exception as e:
+            print(f"خطا در ارسال پیشی: {e}")
+        await asyncio.sleep(18000) 
 
 # ==========================================
 # بخش سوم: وب سرور رندر و اجرای اصلی
 # ==========================================
 async def handle(request):
-    """یک صفحه وب ساده برای اینکه سرور رندر خاموش نشود"""
-    return web.Response(text="Meow Bot is Running Perfectly with Street Cat Catcher!")
+    """جلوگیری از خاموش شدن سرور رندر"""
+    return web.Response(text="Meow Bot is Running 3 Jobs (Meow, Fish, Pishi) and Clicking Fast!")
 
 async def main():
     app = web.Application()
@@ -112,15 +115,14 @@ async def main():
     await site.start()
     print(f"✅ وب‌سرور روی پورت {port} اجرا شد.")
     
-    # روشن کردن کلاینت تلگرام
     await client.start()
-    print("✅ یوزربات متصل شد! منتظر پیام‌ها و گربه‌های خیابونی هستم...")
+    print("✅ یوزربات متصل شد! آماده برای ارسال میو، ماهی، پیشی و کلیک روی دکمه‌ها...")
 
-    # اجرای تسک‌های ارسال پیام در پس‌زمینه
-    asyncio.create_task(pishi_job())
+    # اجرای هر ۳ تسک همزمان در پس‌زمینه
+    asyncio.create_task(meow_job())
     asyncio.create_task(fish_job())
+    asyncio.create_task(pishi_job())
     
-    # روشن نگه داشتن ربات برای همیشه
     await client.run_until_disconnected()
 
 if __name__ == '__main__':
