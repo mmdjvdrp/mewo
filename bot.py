@@ -19,9 +19,10 @@ if CHAT_TARGET.lstrip('-').isdigit():
 client = TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH)
 
 # ==========================================
-# متغیر برای ذخیره چنل‌هایی که باید چک شوند
+# متغیرهای مربوط به چنل‌ها و مقصد پیام‌ها
 # ==========================================
 monitored_channels = set()
+notification_target = 'me'  # پیش‌فرض: پیام‌های ذخیره‌شده (Saved Messages)
 
 # ==========================================
 # بخش اول: گوش دادن به پیام‌ها و کلیک سریع (ربات بازی)
@@ -62,20 +63,33 @@ async def click_button_handler(event):
                         print(f"❌ خطا در کلیک برداشت: {e}")
 
 # ==========================================
-# بخش دوم: مدیریت چنل‌ها (potion, اضافه کردن, delete)
+# بخش دوم: مدیریت چنل‌ها (potion, set, delete, افزودن)
 # ==========================================
 # این بخش فقط به پیام‌هایی که در "پیام‌های ذخیره شده" (me) می‌فرستید واکنش نشان می‌دهد
 @client.on(events.NewMessage(chats='me'))
 async def manage_channels_handler(event):
+    global notification_target
+    
     text = event.raw_text.strip()
     text_lower = text.lower()
 
-    # ۱. هندلر برای potion
+    # ۱. هندلر برای تغییر مقصد پیام‌ها (مثلاً /set @username)
+    if text_lower.startswith('/set '):
+        target = text[5:].strip()
+        notification_target = target
+        
+        if target.lower() == 'me':
+            await event.reply("✅ مقصد پیام‌ها تغییر کرد. از این به بعد آلارم‌ها به **همینجا (سیو مسیج)** ارسال میشن.")
+        else:
+            await event.reply(f"✅ مقصد پیام‌ها تغییر کرد. از این به بعد آلارم‌های چنل به جای سیو مسیج، به پیوی **{target}** ارسال میشن.")
+        return
+
+    # ۲. هندلر برای potion
     if text_lower == 'potion':
         await event.reply("پدب رو چک کن")
         return
 
-    # ۲. هندلر برای پاک کردن چنل (مثلا delete @username)
+    # ۳. هندلر برای پاک کردن چنل (مثلا delete @username)
     if text_lower.startswith('delete '):
         target = text[7:].strip().replace('@', '') # کلمه بعد از delete رو میگیره و @ رو حذف میکنه
         
@@ -92,7 +106,7 @@ async def manage_channels_handler(event):
                 await event.reply("⚠️ این چنل اصلاً تو لیست نبود.")
         return
 
-    # ۳. هندلر برای ست کردن چنل جدید
+    # ۴. هندلر برای ست کردن چنل جدید
     channel_id_or_user = None
 
     # بررسی اینکه آیا فوروارد شده است؟
@@ -107,7 +121,6 @@ async def manage_channels_handler(event):
     if channel_id_or_user:
         monitored_channels.add(channel_id_or_user)
         await event.reply(f"✅ چنل با موفقیت ست شد و چک می‌شود!\n(آیدی ثبت شده: {channel_id_or_user})")
-
 
 # ==========================================
 # بخش سوم: چک کردن چنل‌ها برای پیام جدید
@@ -125,12 +138,16 @@ async def watch_channels_handler(event):
 
         # بررسی اینکه آیا این چنل در لیست ما هست یا نه
         if chat_id_str in monitored_channels or (username and username in monitored_channels):
-            # ارسال پیام به پیوی خودتون (Saved Messages)
             alert_text = f"این چنل ({chat.title or username}) یه پیام جدید داره\nو با هر پیامش اینو بگه"
-            await client.send_message('me', alert_text)
             
-            # اگه خواستی خود پیامِ چنل هم برات فوروارد بشه خط پایین رو از کامنت دربیار:
-            # await event.forward_to('me')
+            try:
+                # ارسال آلارم به شخصی که توسط دستور /set مشخص شده
+                await client.send_message(notification_target, alert_text)
+            except Exception as target_error:
+                # اگر یوزرنیمی که ست کردید اشتباه بود یا اکانت فیک نتونست بهش پیام بده
+                # ارورش رو توی سیو مسیج بهتون میگه
+                await client.send_message('me', f"❌ نتونستم آلارم رو به {notification_target} بفرستم!\nخطا: {target_error}")
+                
     except Exception as e:
         print(f"Error checking channel msg: {e}")
 
