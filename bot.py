@@ -62,7 +62,7 @@ async def click_button_handler(event):
                         print(f"❌ خطا در کلیک برداشت: {e}")
 
 # ==========================================
-# بخش دوم: مدیریت چنل‌ها (potion, set, delete, check, افزودن)
+# بخش دوم: مدیریت چنل‌ها (/set, /check, delete, delete all, افزودن)
 # ==========================================
 @client.on(events.NewMessage(chats='me'))
 async def manage_channels_handler(event):
@@ -71,7 +71,7 @@ async def manage_channels_handler(event):
     text = event.raw_text.strip()
     text_lower = text.lower()
 
-    # ۱. هندلر برای تغییر مقصد پیام‌ها (مثلاً /set @username)
+    # ۱. تغییر مقصد پیام‌ها (مثلاً /set @username)
     if text_lower.startswith('/set '):
         target = text[5:].strip()
         notification_target = target
@@ -82,12 +82,10 @@ async def manage_channels_handler(event):
             await event.reply(f"✅ مقصد پیام‌ها تغییر کرد. از این به بعد آلارم‌های چنل به جای سیو مسیج، به پیوی **{target}** ارسال میشن.")
         return
 
-    # ۲. هندلر برای بررسی وضعیت و چنل‌های ثبت شده
+    # ۲. بررسی وضعیت و چنل‌های ثبت شده
     if text_lower == '/check':
-        # بررسی مقصد ارسال‌ها
         target_display = notification_target if notification_target != 'me' else "(ارسال به همینجا - سیو مسیج)"
         
-        # بررسی چنل‌ها
         if not monitored_channels:
             msg = f"📭 لیست چنل‌ها خالیه و هیچ چنلی ست نشده!\n\n🎯 مقصد پیام‌ها: {target_display}"
         else:
@@ -99,12 +97,13 @@ async def manage_channels_handler(event):
         await event.reply(msg)
         return
 
-    # ۳. هندلر برای potion
-    if text_lower == 'potion':
-        await event.reply("پدب رو چک کن")
+    # ۳. پاک کردن کل چنل‌ها به صورت یکجا
+    if text_lower == 'delete all':
+        monitored_channels.clear()
+        await event.reply("🗑 ✅ تمام چنل‌ها با موفقیت از لیست حذف شدند!")
         return
 
-    # ۴. هندلر برای پاک کردن چنل (مثلا delete @username)
+    # ۴. پاک کردن یک چنل خاص (مثلا delete @username)
     if text_lower.startswith('delete '):
         target = text[7:].strip().replace('@', '') 
         
@@ -120,7 +119,7 @@ async def manage_channels_handler(event):
                 await event.reply("⚠️ این چنل اصلاً تو لیست نبود.")
         return
 
-    # ۵. هندلر برای ست کردن چنل جدید
+    # ۵. ست کردن چنل جدید (با فوروارد یا ارسال آیدی)
     channel_id_or_user = None
 
     if event.fwd_from and event.fwd_from.from_id:
@@ -210,7 +209,7 @@ async def pishi_job():
 # بخش پنجم: وب سرور رندر و اجرای اصلی
 # ==========================================
 async def handle(request):
-    return web.Response(text="Bot is running completely (Game + Channel Monitor + Check CMD)")
+    return web.Response(text="Bot is running completely (Game + Channel Monitor + Check CMD + Delete All)")
 
 async def main():
     app = web.Application()
