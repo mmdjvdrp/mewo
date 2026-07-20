@@ -23,11 +23,27 @@ client = TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH)
 @client.on(events.NewMessage(chats=CHAT_TARGET))
 async def click_button_handler(event):
     """این تابع پیام‌های جدید رو چک می‌کنه و دکمه‌های خاص رو فشار می‌ده"""
+    # بررسی می‌کنه که آیا پیام دکمه داره یا نه
     if event.message.buttons:
-        # 2 ثانیه صبر می‌کنه که شبیه انسان باشه
+        # 2 ثانیه صبر می‌کنه که شبیه انسان باشه و تلگرام شک نکنه
         await asyncio.sleep(2) 
         
-        # تمام دکمه‌های زیر پیام رو یکی یکی بررسی می‌کنه
+        # ------------------------------------------------
+        # ۱. شکار گربه خیابونی (بررسی متن خودِ پیام)
+        # ------------------------------------------------
+        msg_text = event.message.text or ""
+        if 'گربه خیابونی' in msg_text:
+            try:
+                # چون متن دقیق دکمه رو نمی‌دونیم، بهش میگیم روی اولین دکمه کلیک کنه
+                await event.message.click(0)
+                print("🐈 ✅ پیام 'گربه خیابونی' ظاهر شد! روی دکمه‌اش کلیک کردیم.")
+                return # بعد از کلیک، از تابع خارج می‌شه
+            except Exception as e:
+                print(f"❌ خطا در شکار گربه خیابونی: {e}")
+
+        # ------------------------------------------------
+        # ۲. بررسی دکمه‌های کارهای روتین (ماهی و پیشی)
+        # ------------------------------------------------
         for row in event.message.buttons:
             for button in row:
                 
@@ -36,7 +52,7 @@ async def click_button_handler(event):
                     try:
                         await button.click()
                         print("🐟 ✅ روی دکمه 'بده پیشی بخوره' با موفقیت کلیک شد!")
-                        return # خروج از حلقه بعد از کلیک
+                        return 
                     except Exception as e:
                         print(f"❌ خطا در کلیک ماهی: {e}")
                 
@@ -45,7 +61,7 @@ async def click_button_handler(event):
                     try:
                         await button.click()
                         print("💰 ✅ روی دکمه 'برداشت میو پوینت ها' با موفقیت کلیک شد!")
-                        return # خروج از حلقه بعد از کلیک
+                        return 
                     except Exception as e:
                         print(f"❌ خطا در کلیک برداشت: {e}")
 
@@ -56,7 +72,6 @@ async def pishi_job():
     """ارسال پیام پیشی برای باز شدن منوی برداشت"""
     while True:
         try:
-            # در عکس شما کلمه "پیشی" را فرستاده بودید، من هم همین را قرار دادم
             await client.send_message(CHAT_TARGET, 'پیشی')
             print("🐱 پیام 'پیشی' با موفقیت ارسال شد.")
         except Exception as e:
@@ -84,7 +99,7 @@ async def fish_job():
 # ==========================================
 async def handle(request):
     """یک صفحه وب ساده برای اینکه سرور رندر خاموش نشود"""
-    return web.Response(text="Meow Bot is Running Perfectly with Smart Button Clicker!")
+    return web.Response(text="Meow Bot is Running Perfectly with Street Cat Catcher!")
 
 async def main():
     app = web.Application()
@@ -99,13 +114,13 @@ async def main():
     
     # روشن کردن کلاینت تلگرام
     await client.start()
-    print("✅ یوزربات تلگرام متصل شد و در حال کار است.")
+    print("✅ یوزربات متصل شد! منتظر پیام‌ها و گربه‌های خیابونی هستم...")
 
     # اجرای تسک‌های ارسال پیام در پس‌زمینه
     asyncio.create_task(pishi_job())
     asyncio.create_task(fish_job())
     
-    # روشن نگه داشتن ربات
+    # روشن نگه داشتن ربات برای همیشه
     await client.run_until_disconnected()
 
 if __name__ == '__main__':
