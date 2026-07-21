@@ -27,7 +27,6 @@ async def click_street_cat_loop(message):
             await message.click(0)
             await asyncio.sleep(3) # صبر به مدت ۳ ثانیه
         except Exception as e:
-            # وقتی دکمه از کار بیفته یا پیام پاک بشه، حلقه متوقف میشه
             print(f"❌ دکمه گربه خیابونی منقضی شد یا ارور داد: {e}")
             break
 
@@ -36,38 +35,44 @@ async def click_street_cat_loop(message):
 # ==========================================
 @client.on(events.NewMessage(chats=CHAT_TARGET))
 async def click_button_handler(event):
-    if event.message.buttons:
-        await asyncio.sleep(1) 
-        msg_text = event.message.text or ""
-        
-        # ۱. هندلر گربه خیابونی (اجرای تابع کلیک مداوم)
-        if 'گربه خیابونی' in msg_text:
-            # ایجاد یک تسک پس‌زمینه برای کلیک هر 3 ثانیه
-            asyncio.create_task(click_street_cat_loop(event.message))
-            return
+    if not event.message.buttons:
+        return
 
-        # ۲. هندلر ماهی و پیشی
-        for row in event.message.buttons:
-            for button in row:
-                btn_text = button.text or ""
-                
-                # پیدا کردن گزینه دوم (بده پیشی بخوره)
-                if 'پیشی بخوره' in btn_text or 'بده' in btn_text:
-                    try:
-                        await button.click()
-                        print("🐟 ✅ روی دکمه 'بده پیشی بخوره' کلیک شد!")
-                        return 
-                    except Exception as e:
-                        print(f"❌ خطا در کلیک ماهی: {e}")
-                
-                # دکمه برداشت برای پیشی
-                elif 'برداشت' in btn_text or 'پوینت' in btn_text:
-                    try:
-                        await button.click()
-                        print("💰 ✅ روی دکمه 'برداشت میو پوینت ها' کلیک شد!")
-                        return 
-                    except Exception as e:
-                        print(f"❌ خطا در کلیک برداشت: {e}")
+    # ۱.۵ ثانیه تاخیر برای اطمینان از لود شدن کامل دکمه‌ها در سرور تلگرام
+    await asyncio.sleep(1.5) 
+    msg_text = event.message.text or ""
+        
+    # ۱. هندلر گربه خیابونی (اجرای تابع کلیک مداوم)
+    if 'گربه خیابونی' in msg_text:
+        asyncio.create_task(click_street_cat_loop(event.message))
+        return
+
+    # ۲. هندلر ماهی و پیشی (جستجو با شماره ایندکس دکمه)
+    button_index = 0
+    for row in event.message.buttons:
+        for button in row:
+            btn_text = button.text or ""
+            
+            # پیدا کردن گزینه "بده پیشی بخوره"
+            if 'پیشی بخوره' in btn_text or 'بده' in btn_text:
+                try:
+                    # به جای استفاده از خود متغیر باتن، مستقیماً به پیام میگیم روی شماره ایندکس کلیک کنه (۱۰۰٪ قطعی)
+                    await event.message.click(button_index)
+                    print(f"🐟 ✅ روی دکمه '{btn_text}' (گزینه شماره {button_index + 1}) کلیک شد!")
+                    return 
+                except Exception as e:
+                    print(f"❌ خطا در کلیک ماهی: {e}")
+            
+            # دکمه برداشت برای پیشی
+            elif 'برداشت' in btn_text or 'پوینت' in btn_text:
+                try:
+                    await event.message.click(button_index)
+                    print(f"💰 ✅ روی دکمه '{btn_text}' (گزینه شماره {button_index + 1}) کلیک شد!")
+                    return 
+                except Exception as e:
+                    print(f"❌ خطا در کلیک برداشت: {e}")
+            
+            button_index += 1
 
 # ==========================================
 # بخش ارسال پیام‌های زمان‌بندی شده
@@ -105,7 +110,7 @@ async def pishi_job():
 # بخش وب سرور رندر و اجرای اصلی
 # ==========================================
 async def handle(request):
-    return web.Response(text="Bot is running! (Only Game: Meow, Fish, Pishi, Street Cat)")
+    return web.Response(text="Bot is running! (Index-Based Clicker)")
 
 async def main():
     app = web.Application()
