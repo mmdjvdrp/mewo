@@ -14,103 +14,99 @@ CHAT_TARGET = os.environ.get('CHAT_TARGET', '')
 if CHAT_TARGET.lstrip('-').isdigit():
     CHAT_TARGET = int(CHAT_TARGET)
 
+# تنظیم کلاینت تلگرام با استفاده از سشنی که گرفتید
 client = TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH)
 
 # ==========================================
-# تابع برای کلیک مداوم روی گربه خیابونی (هر ۳ ثانیه)
-# ==========================================
-async def click_street_cat_loop(message):
-    print("🐈 ✅ گربه خیابونی پیدا شد! شروع کلیک مداوم هر ۳ ثانیه...")
-    while True:
-        try:
-            # کلیک روی اولین دکمه (ایندکس 0)
-            await message.click(0)
-            await asyncio.sleep(3) # صبر به مدت ۳ ثانیه
-        except Exception as e:
-            print(f"❌ دکمه گربه خیابونی منقضی شد یا ارور داد: {e}")
-            break
-
-# ==========================================
-# بخش گوش دادن به پیام‌ها و کلیک دکمه‌ها
+# بخش اول: گوش دادن به پیام‌ها و کلیک هوشمند
 # ==========================================
 @client.on(events.NewMessage(chats=CHAT_TARGET))
 async def click_button_handler(event):
-    if not event.message.buttons:
-        return
-
-    # ۱.۵ ثانیه تاخیر برای اطمینان از لود شدن کامل دکمه‌ها در سرور تلگرام
-    await asyncio.sleep(1.5) 
-    msg_text = event.message.text or ""
+    """این تابع پیام‌ها را چک کرده و روی دکمه‌ها کلیک می‌کند"""
+    if event.message.buttons:
+        # ۱ ثانیه تاخیر برای اینکه تلگرام درخواست را مسدود نکند
+        await asyncio.sleep(1) 
         
-    # ۱. هندلر گربه خیابونی (اجرای تابع کلیک مداوم)
-    if 'گربه خیابونی' in msg_text:
-        asyncio.create_task(click_street_cat_loop(event.message))
-        return
+        msg_text = event.message.text or ""
+        
+        # ------------------------------------------------
+        # ۱. شکار گربه خیابونی
+        # ------------------------------------------------
+        if 'گربه خیابونی' in msg_text:
+            try:
+                await event.message.click(0) # کلیک روی اولین دکمه
+                print("🐈 ✅ روی دکمه 'گربه خیابونی' کلیک شد!")
+            except Exception as e:
+                print(f"❌ خطا در گربه خیابونی: {e}")
+            return
 
-    # ۲. هندلر ماهی و پیشی (جستجو با شماره ایندکس دکمه)
-    button_index = 0
-    for row in event.message.buttons:
-        for button in row:
-            btn_text = button.text or ""
-            
-            # پیدا کردن گزینه "بده پیشی بخوره"
-            if 'پیشی بخوره' in btn_text or 'بده' in btn_text:
-                try:
-                    # به جای استفاده از خود متغیر باتن، مستقیماً به پیام میگیم روی شماره ایندکس کلیک کنه (۱۰۰٪ قطعی)
-                    await event.message.click(button_index)
-                    print(f"🐟 ✅ روی دکمه '{btn_text}' (گزینه شماره {button_index + 1}) کلیک شد!")
-                    return 
-                except Exception as e:
-                    print(f"❌ خطا در کلیک ماهی: {e}")
-            
-            # دکمه برداشت برای پیشی
-            elif 'برداشت' in btn_text or 'پوینت' in btn_text:
-                try:
-                    await event.message.click(button_index)
-                    print(f"💰 ✅ روی دکمه '{btn_text}' (گزینه شماره {button_index + 1}) کلیک شد!")
-                    return 
-                except Exception as e:
-                    print(f"❌ خطا در کلیک برداشت: {e}")
-            
-            button_index += 1
+        # ------------------------------------------------
+        # ۲. پیام ماهی (کلیک قطعی روی دومین دکمه)
+        # ------------------------------------------------
+        # کلماتی که همیشه تو پیام ماهی هست رو چک میکنه
+        if 'فرصت تصمیم گیری' in msg_text or 'گرفتید' in msg_text or 'ارزش غذایی' in msg_text:
+            try:
+                # عدد 1 یعنی "دومین گزینه". بدون توجه به متن دکمه، دومی رو میزنه!
+                await event.message.click(1) 
+                print("🐟 ✅ مستقیماً روی دومین گزینه (بده پیشی بخوره) کلیک شد!")
+            except Exception as e:
+                print(f"❌ خطا در کلیک ماهی: {e}")
+            return
+
+        # ------------------------------------------------
+        # ۳. پیام برداشت (کلیک قطعی روی اولین دکمه)
+        # ------------------------------------------------
+        if 'میو پوینت' in msg_text or 'تولید شده' in msg_text or 'گشنمیووو' in msg_text:
+            try:
+                # عدد 0 یعنی "اولین گزینه" که همون برداشت هست
+                await event.message.click(0)
+                print("💰 ✅ مستقیماً روی اولین گزینه (برداشت) کلیک شد!")
+            except Exception as e:
+                print(f"❌ خطا در کلیک برداشت: {e}")
+            return
 
 # ==========================================
-# بخش ارسال پیام‌های زمان‌بندی شده
+# بخش دوم: تسک‌های زمان‌بندی شده (میو، ماهی، پیشی)
 # ==========================================
+
 async def meow_job():
-    # هر ۴ دقیقه و ۳۰ ثانیه (۲۷۰ ثانیه)
+    """هر ۵ دقیقه (۲۹۰ ثانیه) میگه 'میو'"""
     while True:
         try:
             await client.send_message(CHAT_TARGET, 'میو')
-        except Exception:
-            pass
-        await asyncio.sleep(270) 
+            print("😺 پیام 'میو' ارسال شد.")
+        except Exception as e:
+            print(f"خطا در ارسال میو: {e}")
+        await asyncio.sleep(290) 
 
 async def fish_job():
-    # هر ۱ ساعت (۳۶۰۰ ثانیه)
-    await asyncio.sleep(5) 
+    """هر ۱ ساعت (۳۶۰۰ ثانیه) میگه 'ماهی'"""
+    await asyncio.sleep(5) # ۵ ثانیه تاخیر اولیه
     while True:
         try:
             await client.send_message(CHAT_TARGET, 'ماهی')
-        except Exception:
-            pass
+            print("🎣 پیام 'ماهی' ارسال شد.")
+        except Exception as e:
+            print(f"خطا در ارسال ماهی: {e}")
         await asyncio.sleep(3600) 
 
 async def pishi_job():
-    # هر ۲ ساعت (۷۲۰۰ ثانیه)
-    await asyncio.sleep(15) 
+    """هر ۵ ساعت (۱۸۰۰۰ ثانیه) میگه 'پیشی'"""
+    await asyncio.sleep(15) # ۱۵ ثانیه تاخیر اولیه
     while True:
         try:
             await client.send_message(CHAT_TARGET, 'پیشی')
-        except Exception:
-            pass
-        await asyncio.sleep(7200) 
+            print("🐱 پیام 'پیشی' ارسال شد.")
+        except Exception as e:
+            print(f"خطا در ارسال پیشی: {e}")
+        await asyncio.sleep(18000) 
 
 # ==========================================
-# بخش وب سرور رندر و اجرای اصلی
+# بخش سوم: وب سرور رندر و اجرای اصلی
 # ==========================================
 async def handle(request):
-    return web.Response(text="Bot is running! (Index-Based Clicker)")
+    """جلوگیری از خاموش شدن سرور رندر"""
+    return web.Response(text="Bot is running! It securely clicks the 2nd button for fish.")
 
 async def main():
     app = web.Application()
@@ -124,9 +120,9 @@ async def main():
     print(f"✅ وب‌سرور روی پورت {port} اجرا شد.")
     
     await client.start()
-    print("✅ یوزربات متصل شد! آماده برای بازی...")
+    print("✅ یوزربات متصل شد! تایمرهای میو، ماهی و پیشی فعال شدند...")
 
-    # اجرای تسک‌های زمان‌بندی شده
+    # استارت کردن هر ۳ زمان‌بندی
     asyncio.create_task(meow_job())
     asyncio.create_task(fish_job())
     asyncio.create_task(pishi_job())
